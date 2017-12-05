@@ -1,0 +1,133 @@
+---
+title: "Implicit Scheme for American Put"
+author: "Ping Fan"
+date: "April 14, 2017"
+output: html_document
+---
+
+###Implicit Scheme(forward) for American Put
+
+Define the function with parameter Nt,Nx
+```{r}
+Impic_Sche <- function(Nt = 100,
+                       Nx = 200,
+                       sigma =  0.2,
+                       t = 0,
+                       T = 1,
+                       R = 300,
+                       B = 0,
+                       K = 100,
+                       r = 0.01)
+{
+  ##variable initialization
+  delta_t <- (T-t)/Nt
+  delta_x <- (R-B)/Nx
+  tj <- seq(from=t, to=T, length.out = Nt+1)
+  x <- seq(from=B, to=R, length.out = Nx+1)
+  M <- matrix(numeric((Nx+1)*(Nx+ 1)),nrow=Nx+1)
+  U <- numeric(Nx+1)
+  C <- numeric(Nx+1)
+  G <- numeric(Nx+1)
+  
+  #U:option value, G:payoff, M:the transposed matrix
+  U <- K-x
+  U <- U*((U>0)+0)
+  G <- U
+  M[1,1] <- 1
+  M[(Nx+1),(Nx+1)] <- 1
+  for (i in 2:Nx)
+  {M[i,(i-1)] <- delta_t*(r*x[i]/(2*delta_x)-sigma^2*x[i]^2/(2*delta_x^2))
+  M[i,i] <- 1+delta_t*(r+sigma^2*x[i]^2/delta_x^2)
+  M[i,(i+1)] <- -delta_t*(r*x[i]/(2*delta_x)+sigma^2*x[i]^2/(2*delta_x^2))
+  }
+  M <- solve(M)
+  U[Nx+1] <- 0  #boundary condition
+  #get the free boundary with (t,x)
+  boundary <- c(100)
+  for(k in 1:Nt)
+  {
+    U[1] <- K*exp(-r*tj[k+1])
+    U <- M%*%U
+    PDEU <- U
+    boundary_index <- which(PDEU > G)[1]  
+    boundary <- c(boundary,x[boundary_index])
+    for(i in 1:(Nx+1))
+    {
+      U[i] <- max(G[i],U[i])
+    }
+  }
+  boundary <- boundary[length(boundary):1]#reverse the boundary as this is a forward method
+  names(boundary) <- tj
+  names(U) <- x
+  result <- list(U,PDEU,G,boundary)
+  names(result) <- c('Option','FromPDE','Payoff','Boundary')
+  result
+}#end of function Impic_Sche
+```
+
+
+###1. Plot the computed approximation of the American put 
+
+Nt=2000,Nx=2000 as reference.
+
+```{r}
+Value_reference <- Impic_Sche(Nt=2000,Nx=2000)
+U <- Value_reference[[1]]
+plot(x=as.numeric(names(U)),y=U,t="l", col="red", lwd=2,
+     xlab="St", ylab="V",
+     main="The value of American put using Implicit Scheme")
+```
+
+###2. Get a table of convergence (refining the grid)
+Nt=2000 fixed, Nx = 2000,1000,500,250.
+
+```{r}
+Value1 <- Impic_Sche(Nt=2000,Nx=250)
+Value2 <- Impic_Sche(Nt=2000,Nx=500)
+Value3 <- Impic_Sche(Nt=2000,Nx=1000)
+U1 <- Value1[[1]]
+U2 <- Value2[[1]]
+U3 <- Value3[[1]]
+error1 <- numeric(3)
+error1[1] <- sqrt(sum((U1-U[(names(U1))])^2))
+error1[2] <- sqrt(sum((U2-U[(names(U2))])^2))
+error1[3] <- sqrt(sum((U3-U[(names(U3))])^2))
+error1
+R=300
+B=0
+Nx <- c(250,500,1000)
+delta_x <- (R-B)/Nx
+plot(x=delta_x,y=error1,t="l", col="red", lwd=2,
+     xlab="dx", ylab="error for dx",
+     main="error1")
+```
+
+Nx=2000 fixed, Nt = 2000,1000,500,250. Nt=2000,Nx=2000 as reference.
+```{r}
+Value1 <- Impic_Sche(Nt=250,Nx=2000)
+Value2 <- Impic_Sche(Nt=500,Nx=2000)
+Value3 <- Impic_Sche(Nt=1000,Nx=2000)
+U1 <- Value1[[1]]
+U2 <- Value2[[1]]
+U3 <- Value3[[1]]
+error2 <- numeric(3)
+error2[1] <- sqrt(sum((U1-U)^2))
+error2[2] <- sqrt(sum((U2-U)^2))
+error2[3] <- sqrt(sum((U3-U)^2))
+error2
+plot(x=c(1/250,1/500,1/1000),y=error2,t="l", col="red", lwd=2,
+     xlab="dt", ylab="error for dt",
+     main="error2")
+```
+
+###3.Plot the free boundary
+```{r}
+D <- Value_reference$Boundary
+plot(x=as.numeric(names(D)),y=D,t="l", col="red", lwd=2,
+     xlab="Year", ylab="St",
+     main="Free Boundary")
+legend(x=0.6,y=84.5, bty = "n","Sf(t)")
+legend(x=0.6,y=78, bty = "n","early exercise")
+legend(x=0.4,y=90, bty = "n","not exercise")
+```
+
